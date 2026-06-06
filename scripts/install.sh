@@ -19,7 +19,7 @@ fi
 
 mkdir -p "$DEST"
 # Copy only the plugin files — never touch DEST/state/ (runtime violation logs).
-for f in __init__.py guards.py stuck.py violations.py plugin.yaml README.md SKILL.md .gitignore; do
+for f in __init__.py guards.py stuck.py violations.py plugin.yaml README.md SKILL.md; do
   cp "$SRC/$f" "$DEST/$f"
 done
 

@@ -31,9 +31,10 @@ if [ "$PURGE" -eq 1 ]; then
   rm -rf "$DEST"
   echo "Purged $DEST (including state/)."
 else
-  for f in __init__.py guards.py stuck.py violations.py plugin.yaml README.md SKILL.md .gitignore; do
+  for f in __init__.py guards.py stuck.py violations.py plugin.yaml README.md SKILL.md; do
     rm -f "$DEST/$f"
   done
+  rm -f "$DEST/.gitignore"   # clean up legacy installs that shipped a .gitignore
   rm -rf "$DEST/__pycache__"
   echo "Removed plugin code from $DEST; preserved state/ (violation history)."
 fi
