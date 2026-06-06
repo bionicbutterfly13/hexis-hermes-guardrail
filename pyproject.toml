@@ -21,9 +21,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/bionicbutterfly13/hexis-hermes-guardrail"
-Source = "https://github.com/bionicbutterfly13/hexis-hermes-guardrail"
-Issues = "https://github.com/bionicbutterfly13/hexis-hermes-guardrail/issues"
+Homepage = "https://github.com/bionicbutterfly13/hexis-hermes-guardrails"
+Source = "https://github.com/bionicbutterfly13/hexis-hermes-guardrails"
+Issues = "https://github.com/bionicbutterfly13/hexis-hermes-guardrails/issues"
 
 [project.scripts]
 hexis-hermes-guardrails = "hexis_hermes_guardrails.cli:main"
