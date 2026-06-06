@@ -1,0 +1,17 @@
+name: hexis
+version: 0.1.0
+description: >-
+  Hexis metacognitive guardrails for Hermes Agent. Ports the Hexis enforcement-
+  escalation operating model (observation -> soft rule -> violation log -> hard
+  gate) onto Hermes-native plugin surfaces: pre_tool_call command guardrails,
+  post_tool_call stuck-loop detection, optional transform_tool_result model
+  surfacing, and a curated violation log. Update-safe: lives entirely under
+  ~/.hermes/plugins/ and never patches Hermes core.
+author: Mani Saint-Victor, MD
+kind: standalone
+provides_hooks:
+  - pre_tool_call
+  - post_tool_call
+  - transform_tool_result
+  - on_session_end
+requires_env: []

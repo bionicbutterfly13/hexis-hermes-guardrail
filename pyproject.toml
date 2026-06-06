@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hexis-hermes-guardrails"
+version = "0.1.0"
+description = "Hexis metacognitive guardrails for Hermes Agent — command guardrails, stuck-loop detection, and enforcement escalation as an update-safe plugin."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Mani Saint-Victor, MD" }]
+keywords = ["hermes", "hermes-agent", "guardrails", "hexis", "agent", "safety", "plugin"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/bionicbutterfly13/hexis-hermes-guardrail"
+Source = "https://github.com/bionicbutterfly13/hexis-hermes-guardrail"
+Issues = "https://github.com/bionicbutterfly13/hexis-hermes-guardrail/issues"
+
+[project.scripts]
+hexis-hermes-guardrails = "hexis_hermes_guardrails.cli:main"
+
+[tool.setuptools]
+# Explicit package list disables flat-layout auto-discovery (which would choke on
+# the repo's docs/, scripts/, etc.). `hexis` is the plugin itself (shipped so the
+# installer can copy it into a Hermes profile); `hexis_hermes_guardrails` is the
+# installer CLI.
+packages = ["hexis", "hexis_hermes_guardrails"]
+
+[tool.setuptools.package-data]
+hexis = ["plugin.yaml", "SKILL.md", "README.md"]

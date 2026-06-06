@@ -1,0 +1,4 @@
+# Runtime state — profile-local, never committed.
+state/
+__pycache__/
+*.pyc

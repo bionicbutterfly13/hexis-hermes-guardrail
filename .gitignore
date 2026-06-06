@@ -1,0 +1,21 @@
+# Local tooling / editor state
+.serena/
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Runtime state — the plugin writes this only in the install target, never here
+state/
+
+# Internal-only notes (provenance map, scratch) — never published
+local/
+
+# Python build / packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+
