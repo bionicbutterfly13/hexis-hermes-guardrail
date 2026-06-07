@@ -1,36 +1,31 @@
-"""Installer CLI for the Hexis Hermes guardrails plugin.
+"""Interactive, multi-platform installer for the Hexis guardrails.
 
-Usage::
+    hexis-hermes-guardrails install          # checkbox-pick platforms (detected ones pre-checked)
+    hexis-hermes-guardrails install --all     # every supported platform
+    hexis-hermes-guardrails install --platform claude-code,codex
+    hexis-hermes-guardrails install --dry-run # show the plan, change nothing
+    hexis-hermes-guardrails update            # re-sync the shared core to installed platforms
+    hexis-hermes-guardrails uninstall [...]   # remove the guard (Hermes keeps state/)
+    hexis-hermes-guardrails status            # what's detected / installed
+    hexis-hermes-guardrails config            # print the Hermes enable block
 
-    hexis-hermes-guardrails install      # copy plugin into ~/.hermes/plugins/hexis
-    hexis-hermes-guardrails uninstall    # remove plugin code, keep state/
-    hexis-hermes-guardrails uninstall --purge   # also remove state/
-    hexis-hermes-guardrails config       # print the config block
+Selection priority: --platform > --all > $HEXIS_PLATFORMS > interactive checkbox.
+In a non-interactive shell with no selection, it errors with guidance (a security
+control should never auto-install onto platforms you didn't choose).
 
-Honors ``HERMES_HOME`` (defaults to ``~/.hermes``). The plugin files are copied
-from the bundled ``hexis`` package, so this works after ``pip install`` without a
-source checkout. Existing runtime ``state/`` is preserved on (re)install.
+Auto-update is OFF by default (a guard that blocks every shell command should not
+silently change itself); use `update` to pull a new version when you choose to.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import sys
-from pathlib import Path
+from typing import List
 
-# Plugin files copied into the Hermes profile. Kept in sync with the `hexis`
-# package contents; missing optional files are skipped, not fatal.
-_PLUGIN_FILES = [
-    "__init__.py",
-    "guards.py",
-    "stuck.py",
-    "violations.py",
-    "plugin.yaml",
-    "README.md",
-    "SKILL.md",
-]
+from . import platforms
+from .platforms import REGISTRY, get, install_shared_core, maybe_remove_shared_core
 
 _CONFIG_BLOCK = """\
 plugins:
@@ -49,77 +44,193 @@ plugins:
         surface_to_model: false
 """
 
-
-def _hermes_home() -> Path:
-    return Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
+_VALID = {p.key for p in REGISTRY}
 
 
-def _plugin_source() -> Path:
-    """Locate the bundled plugin files (the installed ``hexis`` package dir)."""
-    import hexis  # imported lazily so --help works even if something is off
+def _validate(keys: List[str]) -> List[str]:
+    out, bad = [], []
+    for k in keys:
+        (out if k in _VALID else bad).append(k)
+    if bad:
+        print(f"Unknown platform(s): {', '.join(bad)}. "
+              f"Valid: {', '.join(sorted(_VALID))}", file=sys.stderr)
+        return []
+    # de-dupe, preserve order
+    seen, uniq = set(), []
+    for k in out:
+        if k not in seen:
+            seen.add(k); uniq.append(k)
+    return uniq
 
-    return Path(hexis.__file__).resolve().parent
+
+def _interactive_select(detected: List[str]) -> List[str]:
+    try:
+        import questionary
+    except ImportError:
+        print("Interactive mode needs `questionary` (pip install questionary), "
+              "or pass --platform=... / --all.", file=sys.stderr)
+        return []
+    choices = []
+    for p in REGISTRY:
+        det = p.key in detected
+        tags = []
+        tags.append("detected" if det else "not detected")
+        if p.is_installed():
+            tags.append("installed")
+        choices.append(questionary.Choice(
+            title=f"{p.label}  ({', '.join(tags)})", value=p.key, checked=det))
+    answer = questionary.checkbox(
+        "Install Hexis guardrails on which platforms?  "
+        "[space] toggle  [enter] confirm",
+        choices=choices,
+    ).ask()
+    return answer or []
 
 
-def _install() -> int:
-    src = _plugin_source()
-    dest = _hermes_home() / "plugins" / "hexis"
-    dest.mkdir(parents=True, exist_ok=True)
-    copied = 0
-    for name in _PLUGIN_FILES:
-        s = src / name
-        if s.exists():
-            shutil.copy2(s, dest / name)
-            copied += 1
-    print(f"Installed hexis plugin ({copied} files) -> {dest}")
-    print("(runtime state/ preserved if it already existed)\n")
-    print("Next: enable it in ~/.hermes/config.yaml\n")
+def _resolve_selection(args, detected: List[str]) -> List[str]:
+    if getattr(args, "all", False):
+        return [p.key for p in REGISTRY]
+    if getattr(args, "platform", None):
+        keys: List[str] = []
+        for chunk in args.platform:
+            keys += [c.strip() for c in chunk.split(",") if c.strip()]
+        return _validate(keys)
+    env = os.environ.get("HEXIS_PLATFORMS")
+    if env:
+        return _validate([c.strip() for c in env.split(",") if c.strip()])
+    interactive = sys.stdin.isatty() and sys.stdout.isatty() and not getattr(args, "no_input", False)
+    if interactive:
+        return _interactive_select(detected)
+    print("No platforms selected. Pass --platform=<list> or --all "
+          f"(valid: {', '.join(sorted(_VALID))}).", file=sys.stderr)
+    return []
+
+
+def cmd_install(args) -> int:
+    detected = [p.key for p in REGISTRY if p.detect()]
+    selection = _resolve_selection(args, detected)
+    if not selection:
+        return 1
+    prefix = "DRY RUN — would install" if args.dry_run else "Installing"
+    print(f"{prefix} Hexis guardrails on: {', '.join(selection)}\n")
+    failures = []
+    for key in selection:
+        p = get(key)
+        print(f"• {p.label}  ({p.note})")
+        try:
+            for a in p.install(args.dry_run):
+                print(f"    {a}")
+        except platforms.ConfigError as exc:
+            print(f"    SKIPPED — {exc}")
+            failures.append(key)
+        print()
+    if args.dry_run:
+        print("(dry run — nothing changed)")
+    else:
+        print("Done. Verify with `hexis-hermes-guardrails status`.")
+        if "hermes" in selection:
+            print("\nHermes needs enabling in ~/.hermes/config.yaml:\n")
+            print(_CONFIG_BLOCK)
+    if failures:
+        print(f"\nSkipped (fix the listed files, then re-run): {', '.join(failures)}",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_update(args) -> int:
+    installed = [p for p in REGISTRY if p.is_installed()]
+    if not installed:
+        print("Nothing installed to update.")
+        return 0
+    print(f"{'DRY RUN — ' if args.dry_run else ''}Updating shared core + "
+          f"re-syncing: {', '.join(p.key for p in installed)}\n")
+    install_shared_core(args.dry_run)
+    for p in installed:
+        try:
+            for a in p.install(args.dry_run):
+                print(f"  [{p.key}] {a}")
+        except platforms.ConfigError as exc:
+            print(f"  [{p.key}] SKIPPED — {exc}")
+    print("\nDone." if not args.dry_run else "\n(dry run)")
+    return 0
+
+
+def cmd_uninstall(args) -> int:
+    detected = [p.key for p in REGISTRY if p.is_installed()]
+    selection = _resolve_selection(args, detected) if (args.all or args.platform or os.environ.get("HEXIS_PLATFORMS")) else detected
+    if not selection:
+        print("Nothing to uninstall.")
+        return 0
+    for key in selection:
+        p = get(key)
+        print(f"• {p.label}")
+        try:
+            for a in p.uninstall(args.dry_run):
+                print(f"    {a}")
+        except platforms.ConfigError as exc:
+            print(f"    SKIPPED — {exc}")
+    for a in maybe_remove_shared_core(args.dry_run):
+        print(f"  {a}")
+    return 0
+
+
+def cmd_status(_args) -> int:
+    print(f"{'Platform':<14} {'detected':<10} {'installed':<10} notes")
+    print("-" * 72)
+    for p in REGISTRY:
+        print(f"{p.label:<14} {('yes' if p.detect() else 'no'):<10} "
+              f"{('yes' if p.is_installed() else 'no'):<10} {p.note}")
+    return 0
+
+
+def cmd_config(_args) -> int:
     print(_CONFIG_BLOCK)
     return 0
 
 
-def _uninstall(purge: bool) -> int:
-    dest = _hermes_home() / "plugins" / "hexis"
-    # Safety: only ever operate on a path that ends in plugins/hexis.
-    if dest.name != "hexis" or dest.parent.name != "plugins":
-        print(f"Refusing to operate on unexpected path: {dest}", file=sys.stderr)
-        return 1
-    if not dest.exists():
-        print(f"Nothing to uninstall: {dest} not present")
-        return 0
-    if purge:
-        shutil.rmtree(dest)
-        print(f"Purged {dest} (including state/).")
-    else:
-        for name in _PLUGIN_FILES:
-            (dest / name).unlink(missing_ok=True)
-        shutil.rmtree(dest / "__pycache__", ignore_errors=True)
-        print(f"Removed plugin code from {dest}; preserved state/ (violation history).")
-    print("Remember to remove 'hexis' from plugins.enabled in your config.yaml.")
-    return 0
-
-
 def main(argv=None) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    # Affordance: a bare `--all` / `--platform x` (selection flags but no
+    # subcommand) means `install`. Without this, argparse rejects the flags
+    # because they live only on the install/uninstall subparsers.
+    if raw and raw[0].startswith("-") and raw[0] not in ("-h", "--help"):
+        raw = ["install"] + raw
+
     parser = argparse.ArgumentParser(
         prog="hexis-hermes-guardrails",
-        description="Install the Hexis guardrails plugin into a Hermes Agent profile.",
+        description="Install Hexis command guardrails across your AI coding agents.",
     )
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("install", help="Copy the plugin into ~/.hermes/plugins/hexis and print the config block.")
-    un = sub.add_parser("uninstall", help="Remove the installed plugin (preserves state/ unless --purge).")
-    un.add_argument("--purge", action="store_true", help="Also delete state/ (violation history).")
-    sub.add_parser("config", help="Print the config block that enables the plugin.")
 
-    args = parser.parse_args(argv)
-    if args.command == "install":
-        return _install()
-    if args.command == "uninstall":
-        return _uninstall(args.purge)
-    if args.command == "config":
-        print(_CONFIG_BLOCK)
-        return 0
-    parser.print_help()
-    return 1
+    def _add_selection_flags(sp):
+        sp.add_argument("--platform", action="append",
+                        help="platform(s) to target (repeatable or comma-list)")
+        sp.add_argument("--all", action="store_true", help="all supported platforms")
+        sp.add_argument("--dry-run", action="store_true", help="show the plan, change nothing")
+        sp.add_argument("--no-input", action="store_true", help="never prompt (CI)")
+
+    _add_selection_flags(sub.add_parser("install", help="install the guard on selected platforms"))
+    up = sub.add_parser("update", help="re-sync the shared core to installed platforms")
+    up.add_argument("--dry-run", action="store_true")
+    _add_selection_flags(sub.add_parser("uninstall", help="remove the guard (Hermes keeps state/)"))
+    sub.add_parser("status", help="show detected / installed platforms")
+    sub.add_parser("config", help="print the Hermes enable block")
+
+    args = parser.parse_args(raw)
+    cmd = args.command or "install"
+    # argparse with no subcommand: synthesize defaults for install
+    if args.command is None:
+        for attr, default in (("platform", None), ("all", False), ("dry_run", False), ("no_input", False)):
+            setattr(args, attr, getattr(args, attr, default))
+
+    return {
+        "install": cmd_install,
+        "update": cmd_update,
+        "uninstall": cmd_uninstall,
+        "status": cmd_status,
+        "config": cmd_config,
+    }[cmd](args)
 
 
 if __name__ == "__main__":

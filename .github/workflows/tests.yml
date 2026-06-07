@@ -1,0 +1,43 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # The core + hook + installer are pure stdlib, so the unit suite needs no
+      # third-party deps. questionary is only imported lazily for the interactive
+      # picker, which the tests don't exercise.
+      - name: Unit tests (guardcore + hook + installer)
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Hermetic install/uninstall smoke test
+        run: bash scripts/smoke-test.sh
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Build + metadata check
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          python -m twine check dist/*

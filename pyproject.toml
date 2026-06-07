@@ -5,12 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hexis-hermes-guardrails"
 version = "0.1.0"
-description = "Hexis metacognitive guardrails for Hermes Agent — command guardrails, stuck-loop detection, and enforcement escalation as an update-safe plugin."
+description = "Hexis metacognitive command guardrails for AI coding agents (Claude Code, Codex, Cursor, Hermes) — one shared-core rule set, a universal pre-command hook, and a checkbox installer."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 authors = [{ name = "Mani Saint-Victor, MD" }]
-keywords = ["hermes", "hermes-agent", "guardrails", "hexis", "agent", "safety", "plugin"]
+dependencies = ["questionary>=2.0"]
+keywords = ["claude-code", "codex", "cursor", "hermes", "guardrails", "hexis", "agent", "safety", "hooks"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -29,10 +30,10 @@ hexis-hermes-guardrails = "hexis_hermes_guardrails.cli:main"
 
 [tool.setuptools]
 # Explicit package list disables flat-layout auto-discovery (which would choke on
-# the repo's docs/, scripts/, etc.). `hexis` is the plugin itself (shipped so the
-# installer can copy it into a Hermes profile); `hexis_hermes_guardrails` is the
-# installer CLI.
-packages = ["hexis", "hexis_hermes_guardrails"]
+# the repo's docs/, scripts/, etc.). `guardcore` is the platform-agnostic core;
+# `hexis` is the Hermes adapter (shipped so the installer can vendor it into a
+# Hermes profile); `hexis_hermes_guardrails` is the multi-platform installer CLI.
+packages = ["guardcore", "hexis", "hexis_hermes_guardrails"]
 
 [tool.setuptools.package-data]
 hexis = ["plugin.yaml", "SKILL.md", "README.md"]
