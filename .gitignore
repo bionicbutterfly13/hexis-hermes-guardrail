@@ -6,6 +6,10 @@
 __pycache__/
 *.pyc
 
+# Test / coverage artifacts
+.coverage
+.pytest_cache/
+
 # Runtime state — the plugin writes this only in the install target, never here
 state/
 

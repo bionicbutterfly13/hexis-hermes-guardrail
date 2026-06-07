@@ -78,7 +78,15 @@ def _extract(event: dict):
         or event.get("event_type")
         or ""
     )
-    session_id = event.get("session_id") or event.get("sessionId") or ""
+    # Cursor sends conversation_id/generation_id rather than session_id; fall
+    # back so its violations are attributable in the durable log.
+    session_id = (
+        event.get("session_id")
+        or event.get("sessionId")
+        or event.get("conversation_id")
+        or event.get("generation_id")
+        or ""
+    )
 
     if name == "beforeShellExecution":
         return "cursor", event.get("command"), event.get("cwd"), session_id
